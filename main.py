@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, StreamingResponse
 from systemd import journal
@@ -13,6 +13,8 @@ import asyncio
 from datetime import datetime, timedelta
 import select
 
+# Import authentication middleware
+from middlewares import verify_credentials
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -24,7 +26,7 @@ def health_check():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def services_ui(request: Request):
+async def services_ui(request: Request, username: str = Depends(verify_credentials)):
     """
     Render the HTMX + Tailwind UI for systemd services
     """
@@ -32,7 +34,7 @@ async def services_ui(request: Request):
 
 
 @app.get("/logs", response_class=HTMLResponse)
-async def logs_ui(request: Request):
+async def logs_ui(request: Request, username: str = Depends(verify_credentials)):
     """
     Render the HTMX + Tailwind UI for systemd journal logs
     """
@@ -40,7 +42,7 @@ async def logs_ui(request: Request):
 
 
 @app.get("/api/logs/")
-def get_journal_logs(service: str, limit: int = 100):
+def get_journal_logs(service: str, limit: int = 100, username: str = Depends(verify_credentials)):
     """
     Get the last N entries from systemd journal for a specific service unit
     
@@ -138,7 +140,7 @@ def get_journal_logs(service: str, limit: int = 100):
 
 
 @app.get("/api/logs/stream")
-async def stream_logs(service: str):
+async def stream_logs(service: str, username: str = Depends(verify_credentials)):
     """
     Stream logs in real-time using Server-Sent Events (SSE)
     
@@ -235,7 +237,7 @@ def format_log_entry(entry):
 
 
 @app.get("/api/services/")
-def list_systemd_services():
+def list_systemd_services(username: str = Depends(verify_credentials)):
     """
     List all systemd services with their status using D-Bus API
     """
@@ -346,7 +348,7 @@ def list_systemd_services():
 
 
 @app.post("/api/services/{service_name}/start")
-def start_service(service_name: str):
+def start_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Start a systemd service
     
@@ -396,7 +398,7 @@ def start_service(service_name: str):
 
 
 @app.post("/api/services/{service_name}/stop")
-def stop_service(service_name: str):
+def stop_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Stop a systemd service
     
@@ -446,7 +448,7 @@ def stop_service(service_name: str):
 
 
 @app.post("/api/services/{service_name}/restart")
-def restart_service(service_name: str):
+def restart_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Restart a systemd service
     

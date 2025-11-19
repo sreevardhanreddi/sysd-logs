@@ -3,8 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    restart: always
     ports:
-      - "8000:8000"
+      - "8011:8000"
     volumes:
       # Mount full systemd runtime directory for proper D-Bus communication
       - /run/systemd:/run/systemd:ro
@@ -25,3 +26,8 @@ services:
     # Required for systemd access
     privileged: true
     pid: "host"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
