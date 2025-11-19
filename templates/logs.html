@@ -38,7 +38,7 @@
         <select id="service-filter"
           class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
           onchange="updateService(this.value)">
-          <option value="">All Services</option>
+          <option value="">Select a service...</option>
         </select>
 
         <select id="log-limit"
@@ -51,16 +51,26 @@
           <option value="1000">Last 1000</option>
         </select>
 
-        <button id="auto-refresh-btn" onclick="toggleAutoRefresh()"
+        <button id="live-stream-btn" onclick="toggleLiveStream()"
           class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
-          <svg id="auto-refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg id="live-stream-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
             </path>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          <span id="auto-refresh-text">Auto-Refresh: OFF</span>
+          <span id="live-stream-text">Live Stream: OFF</span>
+        </button>
+
+        <button onclick="clearLogs()"
+          class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+            </path>
+          </svg>
+          <span>Clear</span>
         </button>
       </div>
 
@@ -86,10 +96,18 @@
     </div>
 
     <!-- Stats -->
-    <div class="mt-4" id="log-stats">
-      <div class="flex items-center space-x-2 text-gray-300">
-        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-        <span>Loading logs...</span>
+    <div class="mt-4 flex items-center justify-between">
+      <div id="log-stats">
+        <div class="flex items-center space-x-2 text-gray-300">
+          <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+          <span>Loading logs...</span>
+        </div>
+      </div>
+      <div id="stream-status" class="hidden">
+        <div class="flex items-center space-x-2 px-3 py-1 bg-green-900/30 border border-green-800 rounded-lg">
+          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span class="text-green-400 text-sm font-medium">Live Streaming</span>
+        </div>
       </div>
     </div>
   </div>
@@ -113,14 +131,25 @@
 <script>
   let allLogs = [];
   let allServices = [];
-  let autoRefreshInterval = null;
-  let isAutoRefreshEnabled = false;
+  let eventSource = null;
+  let isLiveStreamEnabled = false;
   let currentService = "";
+  let maxLogs = 1000; // Maximum number of logs to keep in memory
 
   // Load services and logs on page load
   window.addEventListener('DOMContentLoaded', function () {
-    loadServices();
-    loadLogs();
+    // Get service from URL parameter if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const serviceParam = urlParams.get('service');
+
+    loadServices().then(() => {
+      if (serviceParam) {
+        const serviceSelect = document.getElementById('service-filter');
+        serviceSelect.value = serviceParam;
+        currentService = serviceParam;
+      }
+      loadLogs();
+    });
   });
 
   async function loadServices() {
@@ -130,7 +159,7 @@
       allServices = data.services || [];
 
       const select = document.getElementById('service-filter');
-      select.innerHTML = '<option value="">All Services</option>';
+      select.innerHTML = '<option value="">Select a service...</option>';
 
       allServices.forEach(service => {
         const option = document.createElement('option');
@@ -148,14 +177,32 @@
     const service = document.getElementById('service-filter').value;
     currentService = service;
 
+    // Service is mandatory
+    if (!service) {
+      document.getElementById('logs-container').innerHTML = `
+        <div class="text-center text-yellow-400 py-8">
+          <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+            </path>
+          </svg>
+          <p class="text-lg font-medium">Please select a service to view logs</p>
+        </div>
+      `;
+      updateServiceDisplay('');
+      return;
+    }
+
     try {
-      let url = `/logs/?limit=${limit}`;
-      if (service) {
-        url += `&service=${encodeURIComponent(service)}`;
-      }
+      let url = `/logs/?service=${encodeURIComponent(service)}&limit=${limit}`;
 
       const response = await fetch(url);
       const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       allLogs = data.logs || [];
       renderLogs(allLogs);
       updateLogStats(data);
@@ -164,7 +211,13 @@
       console.error('Error loading logs:', e);
       document.getElementById('logs-container').innerHTML = `
         <div class="text-center text-red-400 py-8">
-          <p>Error loading logs: ${e.message}</p>
+          <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+            </path>
+          </svg>
+          <p class="text-lg font-medium">Error loading logs</p>
+          <p class="text-sm mt-2">${e.message}</p>
         </div>
       `;
     }
@@ -173,10 +226,11 @@
   function updateServiceDisplay(service) {
     const display = document.getElementById('current-service-display');
     if (service) {
-      display.textContent = `Showing logs for: ${service}`;
+      let modeText = isLiveStreamEnabled ? ' - Live Mode' : '';
+      display.textContent = `Showing logs for: ${service}${modeText}`;
       display.classList.add('text-blue-400');
     } else {
-      display.textContent = 'Showing logs from all services';
+      display.textContent = 'No service selected';
       display.classList.remove('text-blue-400');
     }
   }
@@ -260,6 +314,7 @@
       container.innerHTML = `
         <div class="text-center text-gray-400 py-8">
           <p>No logs found</p>
+          ${isLiveStreamEnabled ? '<p class="text-sm mt-2">Waiting for new log entries...</p>' : ''}
         </div>
       `;
       return;
@@ -295,8 +350,14 @@
       `;
     }).join('');
 
-    // Auto-scroll to bottom
-    container.scrollTop = container.scrollHeight;
+    // Auto-scroll behavior
+    if (isLiveStreamEnabled) {
+      // In live mode, scroll to top (newest entries are at top)
+      container.scrollTop = 0;
+    } else {
+      // In static mode, scroll to bottom (oldest first)
+      container.scrollTop = container.scrollHeight;
+    }
   }
 
   function escapeHtml(text) {
@@ -323,44 +384,132 @@
   }
 
   function updateLogLimit(limit) {
+    if (isLiveStreamEnabled) {
+      // Can't change limit in live mode
+      return;
+    }
     loadLogs();
   }
 
   function updateService(service) {
+    // Stop live stream when changing service
+    if (isLiveStreamEnabled) {
+      toggleLiveStream(); // Turn off live stream
+    }
     loadLogs();
   }
 
   function refreshLogs() {
-    loadLogs();
+    if (isLiveStreamEnabled) {
+      // In live mode, just clear and restart
+      clearLogs();
+      stopLiveStream();
+      startLiveStream();
+    } else {
+      loadLogs();
+    }
   }
 
-  function toggleAutoRefresh() {
-    isAutoRefreshEnabled = !isAutoRefreshEnabled;
-    const btn = document.getElementById('auto-refresh-btn');
-    const text = document.getElementById('auto-refresh-text');
-    const icon = document.getElementById('auto-refresh-icon');
+  function toggleLiveStream() {
+    if (!currentService) {
+      alert('Please select a service first');
+      return;
+    }
 
-    if (isAutoRefreshEnabled) {
+    isLiveStreamEnabled = !isLiveStreamEnabled;
+    const btn = document.getElementById('live-stream-btn');
+    const text = document.getElementById('live-stream-text');
+    const icon = document.getElementById('live-stream-icon');
+    const statusIndicator = document.getElementById('stream-status');
+
+    if (isLiveStreamEnabled) {
       btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
       btn.classList.add('bg-green-700', 'hover:bg-green-600');
-      text.textContent = 'Auto-Refresh: ON';
-      icon.classList.add('animate-spin');
+      text.textContent = 'Live Stream: ON';
+      icon.classList.add('animate-pulse');
+      statusIndicator.classList.remove('hidden');
 
-      // Refresh every 5 seconds
-      autoRefreshInterval = setInterval(() => {
-        loadLogs();
-      }, 5000);
+      // Start SSE connection
+      startLiveStream();
     } else {
       btn.classList.remove('bg-green-700', 'hover:bg-green-600');
       btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-      text.textContent = 'Auto-Refresh: OFF';
-      icon.classList.remove('animate-spin');
+      text.textContent = 'Live Stream: OFF';
+      icon.classList.remove('animate-pulse');
+      statusIndicator.classList.add('hidden');
 
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-      }
+      // Close SSE connection
+      stopLiveStream();
     }
   }
+
+  function startLiveStream() {
+    let url = `/logs/stream?service=${encodeURIComponent(currentService)}`;
+
+    eventSource = new EventSource(url);
+
+    eventSource.onmessage = function (event) {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'connected') {
+          console.log('Connected to log stream for:', data.service);
+          updateServiceDisplay(currentService);
+          updateLogStats({ logs: allLogs });
+        } else if (data.type === 'log') {
+          // Add new log to the beginning (most recent first)
+          allLogs.unshift(data.data);
+
+          // Limit the number of logs in memory
+          if (allLogs.length > maxLogs) {
+            allLogs = allLogs.slice(0, maxLogs);
+          }
+
+          // Re-render logs with search/filter applied
+          const searchTerm = document.getElementById('search-logs').value;
+          filterLogs(searchTerm);
+        } else if (data.type === 'error') {
+          console.error('Stream error:', data.message);
+          stopLiveStream();
+        } else if (data.type === 'disconnected') {
+          console.log('Disconnected from log stream');
+        }
+      } catch (e) {
+        console.error('Error parsing SSE data:', e);
+      }
+    };
+
+    eventSource.onerror = function (event) {
+      console.error('SSE connection error:', event);
+      stopLiveStream();
+
+      // Try to reconnect after 3 seconds if live stream is still enabled
+      if (isLiveStreamEnabled) {
+        setTimeout(() => {
+          if (isLiveStreamEnabled) {
+            startLiveStream();
+          }
+        }, 3000);
+      }
+    };
+  }
+
+  function stopLiveStream() {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+  }
+
+  function clearLogs() {
+    allLogs = [];
+    renderLogs([]);
+    updateLogStats({ logs: [] });
+  }
+
+  // Clean up on page unload
+  window.addEventListener('beforeunload', function () {
+    stopLiveStream();
+  });
 </script>
 {% endblock %}

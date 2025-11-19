@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from systemd import journal
 from pystemd.systemd1 import Manager
 from pystemd import daemon
@@ -9,6 +9,9 @@ import subprocess
 import json
 from loguru import logger
 import sys
+import asyncio
+from datetime import datetime, timedelta
+import select
 
 
 app = FastAPI()
@@ -37,61 +40,52 @@ async def logs_ui(request: Request):
 
 
 @app.get("/logs/")
-def get_journal_logs(limit: int = 100, service: str = None):
+def get_journal_logs(service: str, limit: int = 100):
     """
-    Get the last N entries from systemd journal
-    Optionally filter by a specific service unit
+    Get the last N entries from systemd journal for a specific service unit
+    
+    Args:
+        service: The systemd service unit name (e.g., nginx.service)
+        limit: Maximum number of log entries to return (default: 100)
     """
-    logger.info(
-        f"Fetching last {limit} journal entries"
-        + (f" for service {service}" if service else "")
-    )
+    logger.info(f"Fetching last {limit} journal entries for service {service}")
+    
     try:
         # Use systemd-python journal reader
         j = journal.Reader()
         j.log_level(journal.LOG_DEBUG)
 
-        # Filter by service if specified
-        if service:
-            j.add_match(_SYSTEMD_UNIT=service)
+        # Filter by service (mandatory)
+        j.add_match(_SYSTEMD_UNIT=service)
+        logger.debug(f"Added match filter for service: {service}")
 
-        # Seek to the end and go backwards
+        # Seek to tail and iterate BACKWARD to get recent entries
         j.seek_tail()
-        j.get_previous()
-
-        # Collect entries
+        logger.debug("Seeked to journal tail, iterating backward")
+        
         logs = []
-        count = 0
-
-        for entry in j:
-            if count >= limit:
+        for i in range(limit):
+            entry = j.get_previous()
+            
+            # get_previous() returns empty dict when no more entries
+            if not entry:
+                logger.debug(f"No more entries at iteration {i}")
                 break
 
-            # Extract relevant fields
-            log_entry = {
-                "timestamp": (
-                    entry.get("__REALTIME_TIMESTAMP", "").isoformat()
-                    if hasattr(entry.get("__REALTIME_TIMESTAMP", ""), "isoformat")
-                    else str(entry.get("__REALTIME_TIMESTAMP", ""))
-                ),
-                "priority": entry.get("PRIORITY", ""),
-                "unit": entry.get(
-                    "_SYSTEMD_UNIT", entry.get("SYSLOG_IDENTIFIER", "system")
-                ),
-                "message": entry.get("MESSAGE", ""),
-                "pid": entry.get("_PID", ""),
-                "hostname": entry.get("_HOSTNAME", ""),
-            }
-            logs.append(log_entry)
-            count += 1
+            logger.debug(f"Processing entry {i}, has {len(entry)} fields")
+            try:
+                log_entry = format_log_entry(entry)
+                logs.append(log_entry)
+                logger.debug(f"Successfully processed entry {i}")
+            except Exception as entry_error:
+                logger.warning(f"Error processing journal entry: {entry_error}")
+                continue
 
-        # Reverse to show oldest first
+        # Reverse to show oldest first (we collected from newest to oldest)
         logs.reverse()
+        logger.debug(f"Collected {len(logs)} entries from journal")
 
-        logger.success(
-            f"Successfully retrieved {len(logs)} journal entries"
-            + (f" for {service}" if service else "")
-        )
+        logger.success(f"Successfully retrieved {len(logs)} journal entries for {service}")
         return {"count": len(logs), "logs": logs, "service": service}
 
     except Exception as e:
@@ -100,9 +94,7 @@ def get_journal_logs(limit: int = 100, service: str = None):
 
         # Fallback to journalctl command
         try:
-            cmd = ["journalctl", "-n", str(limit), "-o", "json", "--no-pager"]
-            if service:
-                cmd.extend(["-u", service])
+            cmd = ["journalctl", "-n", str(limit), "-o", "json", "--no-pager", "-u", service]
 
             result = subprocess.run(
                 cmd,
@@ -132,18 +124,108 @@ def get_journal_logs(limit: int = 100, service: str = None):
                         continue
 
             logger.success(
-                f"Successfully retrieved {len(logs)} journal entries using fallback"
-                + (f" for {service}" if service else "")
+                f"Successfully retrieved {len(logs)} journal entries for {service} using fallback"
             )
             return {"count": len(logs), "logs": logs, "service": service}
 
         except Exception as fallback_error:
             logger.exception(f"Fallback method also failed: {str(fallback_error)}")
             return {
-                "error": f"Failed to read journal: {str(fallback_error)}",
+                "error": f"Failed to read journal for {service}: {str(fallback_error)}",
                 "logs": [],
                 "service": service,
             }
+
+
+@app.get("/logs/stream")
+async def stream_logs(service: str):
+    """
+    Stream logs in real-time using Server-Sent Events (SSE)
+    
+    Args:
+        service: The systemd service unit name (e.g., nginx.service)
+    """
+    
+    async def generate_log_stream():
+        try:
+            # Create journal reader
+            j = journal.Reader()
+            j.log_level(journal.LOG_DEBUG)
+            
+            # Filter by service
+            j.add_match(_SYSTEMD_UNIT=service)
+            logger.info(f"Starting log stream for service: {service}")
+            
+            # Seek to end for live streaming
+            j.seek_tail()
+            logger.debug("Starting live stream from tail")
+            
+            # Send initial connection message
+            yield f"data: {json.dumps({'type': 'connected', 'service': service})}\n\n"
+            
+            # Follow the journal in real-time
+            logger.debug("Starting real-time follow loop")
+            while True:
+                # Wait for new entries (with timeout)
+                change = j.wait(1.0)  # Wait up to 1 second for new entries
+                if change == journal.APPEND:
+                    # New entries available, read them
+                    for entry in j:
+                        try:
+                            log_entry = format_log_entry(entry)
+                            yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+                        except Exception as e:
+                            logger.warning(f"Error formatting entry: {e}")
+                            continue
+                
+                # Small sleep to prevent CPU spinning
+                await asyncio.sleep(0.1)
+                
+        except asyncio.CancelledError:
+            logger.info(f"Log stream cancelled for service: {service}")
+            yield f"data: {json.dumps({'type': 'disconnected'})}\n\n"
+        except Exception as e:
+            logger.exception(f"Error in log stream: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_log_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
+
+
+def format_log_entry(entry):
+    """Format a journal entry into a log dict"""
+    # Handle both string and bytes for various fields
+    message = entry.get("MESSAGE", "")
+    if isinstance(message, bytes):
+        message = message.decode('utf-8', errors='replace')
+    
+    unit = entry.get("_SYSTEMD_UNIT", entry.get("SYSLOG_IDENTIFIER", "system"))
+    if isinstance(unit, bytes):
+        unit = unit.decode('utf-8', errors='replace')
+    
+    hostname = entry.get("_HOSTNAME", "")
+    if isinstance(hostname, bytes):
+        hostname = hostname.decode('utf-8', errors='replace')
+    
+    return {
+        "timestamp": (
+            entry.get("__REALTIME_TIMESTAMP", "").isoformat()
+            if hasattr(entry.get("__REALTIME_TIMESTAMP", ""), "isoformat")
+            else str(entry.get("__REALTIME_TIMESTAMP", ""))
+        ),
+        "priority": entry.get("PRIORITY", ""),
+        "unit": unit,
+        "message": str(message),
+        "pid": entry.get("_PID", ""),
+        "hostname": hostname,
+    }
 
 
 @app.get("/services/")
@@ -157,7 +239,6 @@ def list_systemd_services():
         with Manager() as manager:
             # List all units
             units = manager.Manager.ListUnits()
-            logger.info(f"Units: {units}")
 
             logger.info(f"Retrieved {len(units)} units from systemd")
 

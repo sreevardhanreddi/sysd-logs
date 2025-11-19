@@ -13,6 +13,11 @@ services:
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
       # Mount cgroup for systemd access
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Mount systemd journal files (CRITICAL for reading logs)
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      # Mount machine-id for journal reader
+      - /etc/machine-id:/etc/machine-id:ro
     env_file:
       - .env
     environment:
