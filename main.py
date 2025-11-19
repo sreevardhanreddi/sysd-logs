@@ -345,5 +345,155 @@ def list_systemd_services():
             }
 
 
+@app.post("/api/services/{service_name}/start")
+def start_service(service_name: str):
+    """
+    Start a systemd service
+    
+    Args:
+        service_name: The systemd service unit name (e.g., nginx.service)
+    """
+    logger.info(f"Attempting to start service: {service_name}")
+    
+    try:
+        # Use pystemd to communicate with systemd via D-Bus
+        with Manager() as manager:
+            # Start the service
+            manager.Manager.StartUnit(service_name.encode(), b'replace')
+            logger.success(f"Successfully started service: {service_name}")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} started successfully",
+                "service": service_name
+            }
+    
+    except Exception as e:
+        logger.exception(f"Failed to start service {service_name} via D-Bus: {str(e)}")
+        logger.info("Falling back to systemctl command")
+        
+        # Fallback to systemctl command
+        try:
+            result = subprocess.run(
+                ["systemctl", "start", service_name],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success(f"Successfully started service {service_name} using fallback")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} started successfully",
+                "service": service_name
+            }
+        
+        except subprocess.CalledProcessError as fallback_error:
+            logger.exception(f"Fallback method also failed: {str(fallback_error)}")
+            return {
+                "status": "error",
+                "message": f"Failed to start service {service_name}: {fallback_error.stderr or str(fallback_error)}",
+                "service": service_name
+            }
+
+
+@app.post("/api/services/{service_name}/stop")
+def stop_service(service_name: str):
+    """
+    Stop a systemd service
+    
+    Args:
+        service_name: The systemd service unit name (e.g., nginx.service)
+    """
+    logger.info(f"Attempting to stop service: {service_name}")
+    
+    try:
+        # Use pystemd to communicate with systemd via D-Bus
+        with Manager() as manager:
+            # Stop the service
+            manager.Manager.StopUnit(service_name.encode(), b'replace')
+            logger.success(f"Successfully stopped service: {service_name}")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} stopped successfully",
+                "service": service_name
+            }
+    
+    except Exception as e:
+        logger.exception(f"Failed to stop service {service_name} via D-Bus: {str(e)}")
+        logger.info("Falling back to systemctl command")
+        
+        # Fallback to systemctl command
+        try:
+            result = subprocess.run(
+                ["systemctl", "stop", service_name],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success(f"Successfully stopped service {service_name} using fallback")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} stopped successfully",
+                "service": service_name
+            }
+        
+        except subprocess.CalledProcessError as fallback_error:
+            logger.exception(f"Fallback method also failed: {str(fallback_error)}")
+            return {
+                "status": "error",
+                "message": f"Failed to stop service {service_name}: {fallback_error.stderr or str(fallback_error)}",
+                "service": service_name
+            }
+
+
+@app.post("/api/services/{service_name}/restart")
+def restart_service(service_name: str):
+    """
+    Restart a systemd service
+    
+    Args:
+        service_name: The systemd service unit name (e.g., nginx.service)
+    """
+    logger.info(f"Attempting to restart service: {service_name}")
+    
+    try:
+        # Use pystemd to communicate with systemd via D-Bus
+        with Manager() as manager:
+            # Restart the service
+            manager.Manager.RestartUnit(service_name.encode(), b'replace')
+            logger.success(f"Successfully restarted service: {service_name}")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} restarted successfully",
+                "service": service_name
+            }
+    
+    except Exception as e:
+        logger.exception(f"Failed to restart service {service_name} via D-Bus: {str(e)}")
+        logger.info("Falling back to systemctl command")
+        
+        # Fallback to systemctl command
+        try:
+            result = subprocess.run(
+                ["systemctl", "restart", service_name],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success(f"Successfully restarted service {service_name} using fallback")
+            return {
+                "status": "success",
+                "message": f"Service {service_name} restarted successfully",
+                "service": service_name
+            }
+        
+        except subprocess.CalledProcessError as fallback_error:
+            logger.exception(f"Fallback method also failed: {str(fallback_error)}")
+            return {
+                "status": "error",
+                "message": f"Failed to restart service {service_name}: {fallback_error.stderr or str(fallback_error)}",
+                "service": service_name
+            }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
