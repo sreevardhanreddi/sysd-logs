@@ -42,16 +42,18 @@ async def logs_ui(request: Request, username: str = Depends(verify_credentials))
 
 
 @app.get("/api/logs/")
-def get_journal_logs(service: str, limit: int = 100, username: str = Depends(verify_credentials)):
+def get_journal_logs(
+    service: str, limit: int = 100, username: str = Depends(verify_credentials)
+):
     """
     Get the last N entries from systemd journal for a specific service unit
-    
+
     Args:
         service: The systemd service unit name (e.g., nginx.service)
         limit: Maximum number of log entries to return (default: 100)
     """
     logger.info(f"Fetching last {limit} journal entries for service {service}")
-    
+
     try:
         # Use systemd-python journal reader
         j = journal.Reader()
@@ -64,11 +66,11 @@ def get_journal_logs(service: str, limit: int = 100, username: str = Depends(ver
         # Seek to tail and iterate BACKWARD to get recent entries
         j.seek_tail()
         logger.debug("Seeked to journal tail, iterating backward")
-        
+
         logs = []
         for i in range(limit):
             entry = j.get_previous()
-            
+
             # get_previous() returns empty dict when no more entries
             if not entry:
                 logger.debug(f"No more entries at iteration {i}")
@@ -87,7 +89,9 @@ def get_journal_logs(service: str, limit: int = 100, username: str = Depends(ver
         logs.reverse()
         logger.debug(f"Collected {len(logs)} entries from journal (oldest first)")
 
-        logger.success(f"Successfully retrieved {len(logs)} journal entries for {service}")
+        logger.success(
+            f"Successfully retrieved {len(logs)} journal entries for {service}"
+        )
         return {"count": len(logs), "logs": logs, "service": service}
 
     except Exception as e:
@@ -96,7 +100,16 @@ def get_journal_logs(service: str, limit: int = 100, username: str = Depends(ver
 
         # Fallback to journalctl command
         try:
-            cmd = ["journalctl", "-n", str(limit), "-o", "json", "--no-pager", "-u", service]
+            cmd = [
+                "journalctl",
+                "-n",
+                str(limit),
+                "-o",
+                "json",
+                "--no-pager",
+                "-u",
+                service,
+            ]
 
             result = subprocess.run(
                 cmd,
@@ -143,29 +156,29 @@ def get_journal_logs(service: str, limit: int = 100, username: str = Depends(ver
 async def stream_logs(service: str, username: str = Depends(verify_credentials)):
     """
     Stream logs in real-time using Server-Sent Events (SSE)
-    
+
     Args:
         service: The systemd service unit name (e.g., nginx.service)
     """
-    
+
     async def generate_log_stream():
         try:
             # Create journal reader
             j = journal.Reader()
             j.log_level(journal.LOG_DEBUG)
-            
+
             # Filter by service
             j.add_match(_SYSTEMD_UNIT=service)
             logger.info(f"Starting log stream for service: {service}")
-            
+
             # Seek to end for live streaming
             j.seek_tail()
             j.get_previous()  # Position at last entry
             logger.debug("Starting live stream from tail")
-            
+
             # Send initial connection message
             yield f"data: {json.dumps({'type': 'connected', 'service': service})}\n\n"
-            
+
             # Follow the journal in real-time
             logger.debug("Starting real-time follow loop")
             while True:
@@ -177,7 +190,7 @@ async def stream_logs(service: str, username: str = Depends(verify_credentials))
                         entry = j.get_next()
                         if not entry:
                             break
-                        
+
                         try:
                             log_entry = format_log_entry(entry)
                             yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
@@ -185,17 +198,17 @@ async def stream_logs(service: str, username: str = Depends(verify_credentials))
                         except Exception as e:
                             logger.warning(f"Error formatting entry: {e}")
                             continue
-                
+
                 # Small sleep to prevent CPU spinning
                 await asyncio.sleep(0.1)
-                
+
         except asyncio.CancelledError:
             logger.info(f"Log stream cancelled for service: {service}")
             yield f"data: {json.dumps({'type': 'disconnected'})}\n\n"
         except Exception as e:
             logger.exception(f"Error in log stream: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-    
+
     return StreamingResponse(
         generate_log_stream(),
         media_type="text/event-stream",
@@ -203,7 +216,7 @@ async def stream_logs(service: str, username: str = Depends(verify_credentials))
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
-        }
+        },
     )
 
 
@@ -212,16 +225,16 @@ def format_log_entry(entry):
     # Handle both string and bytes for various fields
     message = entry.get("MESSAGE", "")
     if isinstance(message, bytes):
-        message = message.decode('utf-8', errors='replace')
-    
+        message = message.decode("utf-8", errors="replace")
+
     unit = entry.get("_SYSTEMD_UNIT", entry.get("SYSLOG_IDENTIFIER", "system"))
     if isinstance(unit, bytes):
-        unit = unit.decode('utf-8', errors='replace')
-    
+        unit = unit.decode("utf-8", errors="replace")
+
     hostname = entry.get("_HOSTNAME", "")
     if isinstance(hostname, bytes):
-        hostname = hostname.decode('utf-8', errors='replace')
-    
+        hostname = hostname.decode("utf-8", errors="replace")
+
     return {
         "timestamp": (
             entry.get("__REALTIME_TIMESTAMP", "").isoformat()
@@ -351,28 +364,28 @@ def list_systemd_services(username: str = Depends(verify_credentials)):
 def start_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Start a systemd service
-    
+
     Args:
         service_name: The systemd service unit name (e.g., nginx.service)
     """
     logger.info(f"Attempting to start service: {service_name}")
-    
+
     try:
         # Use pystemd to communicate with systemd via D-Bus
         with Manager() as manager:
             # Start the service
-            manager.Manager.StartUnit(service_name.encode(), b'replace')
+            manager.Manager.StartUnit(service_name.encode(), b"replace")
             logger.success(f"Successfully started service: {service_name}")
             return {
                 "status": "success",
                 "message": f"Service {service_name} started successfully",
-                "service": service_name
+                "service": service_name,
             }
-    
+
     except Exception as e:
         logger.exception(f"Failed to start service {service_name} via D-Bus: {str(e)}")
         logger.info("Falling back to systemctl command")
-        
+
         # Fallback to systemctl command
         try:
             result = subprocess.run(
@@ -381,19 +394,21 @@ def start_service(service_name: str, username: str = Depends(verify_credentials)
                 text=True,
                 check=True,
             )
-            logger.success(f"Successfully started service {service_name} using fallback")
+            logger.success(
+                f"Successfully started service {service_name} using fallback"
+            )
             return {
                 "status": "success",
                 "message": f"Service {service_name} started successfully",
-                "service": service_name
+                "service": service_name,
             }
-        
+
         except subprocess.CalledProcessError as fallback_error:
             logger.exception(f"Fallback method also failed: {str(fallback_error)}")
             return {
                 "status": "error",
                 "message": f"Failed to start service {service_name}: {fallback_error.stderr or str(fallback_error)}",
-                "service": service_name
+                "service": service_name,
             }
 
 
@@ -401,28 +416,28 @@ def start_service(service_name: str, username: str = Depends(verify_credentials)
 def stop_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Stop a systemd service
-    
+
     Args:
         service_name: The systemd service unit name (e.g., nginx.service)
     """
     logger.info(f"Attempting to stop service: {service_name}")
-    
+
     try:
         # Use pystemd to communicate with systemd via D-Bus
         with Manager() as manager:
             # Stop the service
-            manager.Manager.StopUnit(service_name.encode(), b'replace')
+            manager.Manager.StopUnit(service_name.encode(), b"replace")
             logger.success(f"Successfully stopped service: {service_name}")
             return {
                 "status": "success",
                 "message": f"Service {service_name} stopped successfully",
-                "service": service_name
+                "service": service_name,
             }
-    
+
     except Exception as e:
         logger.exception(f"Failed to stop service {service_name} via D-Bus: {str(e)}")
         logger.info("Falling back to systemctl command")
-        
+
         # Fallback to systemctl command
         try:
             result = subprocess.run(
@@ -431,19 +446,21 @@ def stop_service(service_name: str, username: str = Depends(verify_credentials))
                 text=True,
                 check=True,
             )
-            logger.success(f"Successfully stopped service {service_name} using fallback")
+            logger.success(
+                f"Successfully stopped service {service_name} using fallback"
+            )
             return {
                 "status": "success",
                 "message": f"Service {service_name} stopped successfully",
-                "service": service_name
+                "service": service_name,
             }
-        
+
         except subprocess.CalledProcessError as fallback_error:
             logger.exception(f"Fallback method also failed: {str(fallback_error)}")
             return {
                 "status": "error",
                 "message": f"Failed to stop service {service_name}: {fallback_error.stderr or str(fallback_error)}",
-                "service": service_name
+                "service": service_name,
             }
 
 
@@ -451,28 +468,30 @@ def stop_service(service_name: str, username: str = Depends(verify_credentials))
 def restart_service(service_name: str, username: str = Depends(verify_credentials)):
     """
     Restart a systemd service
-    
+
     Args:
         service_name: The systemd service unit name (e.g., nginx.service)
     """
     logger.info(f"Attempting to restart service: {service_name}")
-    
+
     try:
         # Use pystemd to communicate with systemd via D-Bus
         with Manager() as manager:
             # Restart the service
-            manager.Manager.RestartUnit(service_name.encode(), b'replace')
+            manager.Manager.RestartUnit(service_name.encode(), b"replace")
             logger.success(f"Successfully restarted service: {service_name}")
             return {
                 "status": "success",
                 "message": f"Service {service_name} restarted successfully",
-                "service": service_name
+                "service": service_name,
             }
-    
+
     except Exception as e:
-        logger.exception(f"Failed to restart service {service_name} via D-Bus: {str(e)}")
+        logger.exception(
+            f"Failed to restart service {service_name} via D-Bus: {str(e)}"
+        )
         logger.info("Falling back to systemctl command")
-        
+
         # Fallback to systemctl command
         try:
             result = subprocess.run(
@@ -481,19 +500,21 @@ def restart_service(service_name: str, username: str = Depends(verify_credential
                 text=True,
                 check=True,
             )
-            logger.success(f"Successfully restarted service {service_name} using fallback")
+            logger.success(
+                f"Successfully restarted service {service_name} using fallback"
+            )
             return {
                 "status": "success",
                 "message": f"Service {service_name} restarted successfully",
-                "service": service_name
+                "service": service_name,
             }
-        
+
         except subprocess.CalledProcessError as fallback_error:
             logger.exception(f"Fallback method also failed: {str(fallback_error)}")
             return {
                 "status": "error",
                 "message": f"Failed to restart service {service_name}: {fallback_error.stderr or str(fallback_error)}",
-                "service": service_name
+                "service": service_name,
             }
 
 
