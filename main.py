@@ -18,12 +18,12 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello, World!"}
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 
-@app.get("/ui", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
 async def services_ui(request: Request):
     """
     Render the HTMX + Tailwind UI for systemd services
@@ -31,7 +31,7 @@ async def services_ui(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/ui/logs", response_class=HTMLResponse)
+@app.get("/logs", response_class=HTMLResponse)
 async def logs_ui(request: Request):
     """
     Render the HTMX + Tailwind UI for systemd journal logs
@@ -39,7 +39,7 @@ async def logs_ui(request: Request):
     return templates.TemplateResponse("logs.html", {"request": request})
 
 
-@app.get("/logs/")
+@app.get("/api/logs/")
 def get_journal_logs(service: str, limit: int = 100):
     """
     Get the last N entries from systemd journal for a specific service unit
@@ -83,7 +83,7 @@ def get_journal_logs(service: str, limit: int = 100):
 
         # Reverse to show oldest first (we collected from newest to oldest)
         logs.reverse()
-        logger.debug(f"Collected {len(logs)} entries from journal")
+        logger.debug(f"Collected {len(logs)} entries from journal (oldest first)")
 
         logger.success(f"Successfully retrieved {len(logs)} journal entries for {service}")
         return {"count": len(logs), "logs": logs, "service": service}
@@ -137,7 +137,7 @@ def get_journal_logs(service: str, limit: int = 100):
             }
 
 
-@app.get("/logs/stream")
+@app.get("/api/logs/stream")
 async def stream_logs(service: str):
     """
     Stream logs in real-time using Server-Sent Events (SSE)
@@ -158,6 +158,7 @@ async def stream_logs(service: str):
             
             # Seek to end for live streaming
             j.seek_tail()
+            j.get_previous()  # Position at last entry
             logger.debug("Starting live stream from tail")
             
             # Send initial connection message
@@ -169,11 +170,16 @@ async def stream_logs(service: str):
                 # Wait for new entries (with timeout)
                 change = j.wait(1.0)  # Wait up to 1 second for new entries
                 if change == journal.APPEND:
-                    # New entries available, read them
-                    for entry in j:
+                    # New entries available, read them using get_next()
+                    while True:
+                        entry = j.get_next()
+                        if not entry:
+                            break
+                        
                         try:
                             log_entry = format_log_entry(entry)
                             yield f"data: {json.dumps({'type': 'log', 'data': log_entry})}\n\n"
+                            await asyncio.sleep(0)  # Allow other tasks to run
                         except Exception as e:
                             logger.warning(f"Error formatting entry: {e}")
                             continue
@@ -228,7 +234,7 @@ def format_log_entry(entry):
     }
 
 
-@app.get("/services/")
+@app.get("/api/services/")
 def list_systemd_services():
     """
     List all systemd services with their status using D-Bus API

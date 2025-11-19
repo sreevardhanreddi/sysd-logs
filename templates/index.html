@@ -3,7 +3,7 @@
 {% block title %}Systemd Services - Dashboard{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto">
+<div class="max-w-9xl mx-auto">
   <!-- Header -->
   <div class="mb-8">
     <div class="flex items-center justify-between">
@@ -11,7 +11,7 @@
         <h1 class="text-4xl font-bold text-white mb-2">Systemd Services Dashboard</h1>
         <p class="text-gray-400">Monitor and manage your system services</p>
       </div>
-      <a href="/ui/logs"
+      <a href="/logs"
         class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -30,7 +30,7 @@
         <h2 class="text-xl font-semibold text-white mb-2">Services Overview</h2>
         <p class="text-gray-400 text-sm">Real-time status of all systemd services</p>
       </div>
-      <button hx-get="/services/" hx-target="#services-table-body" hx-swap="innerHTML" hx-trigger="click"
+      <button hx-get="/api/services/" hx-target="#services-table-body" hx-swap="innerHTML" hx-trigger="click"
         class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -95,7 +95,7 @@
             </th>
           </tr>
         </thead>
-        <tbody id="services-table-body" class="bg-slate-800 divide-y divide-slate-700" hx-get="/services/"
+        <tbody id="services-table-body" class="bg-slate-800 divide-y divide-slate-700" hx-get="/api/services/"
           hx-trigger="load" hx-swap="innerHTML">
           <!-- Services will be loaded here via HTMX -->
           <tr>
@@ -214,7 +214,7 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center">
-                        <a href="/ui/logs?service=${encodeURIComponent(service.unit)}" 
+                        <a href="/logs?service=${encodeURIComponent(service.unit)}" 
                            class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition duration-150 space-x-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 

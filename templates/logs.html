@@ -3,7 +3,7 @@
 {% block title %}System Logs - Journal Viewer{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto">
+<div class="max-w-9xl mx-auto">
   <!-- Header -->
   <div class="mb-8">
     <div class="flex items-center justify-between">
@@ -11,7 +11,7 @@
         <h1 class="text-4xl font-bold text-white mb-2">System Logs</h1>
         <p class="text-gray-400">Real-time systemd journal viewer</p>
       </div>
-      <a href="/ui"
+      <a href="/"
         class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
@@ -154,7 +154,7 @@
 
   async function loadServices() {
     try {
-      const response = await fetch('/services/');
+      const response = await fetch('/api/services/');
       const data = await response.json();
       allServices = data.services || [];
 
@@ -194,7 +194,7 @@
     }
 
     try {
-      let url = `/logs/?service=${encodeURIComponent(service)}&limit=${limit}`;
+      let url = `/api/logs/?service=${encodeURIComponent(service)}&limit=${limit}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -350,14 +350,8 @@
       `;
     }).join('');
 
-    // Auto-scroll behavior
-    if (isLiveStreamEnabled) {
-      // In live mode, scroll to top (newest entries are at top)
-      container.scrollTop = 0;
-    } else {
-      // In static mode, scroll to bottom (oldest first)
-      container.scrollTop = container.scrollHeight;
-    }
+    // Auto-scroll to bottom to show latest logs
+    container.scrollTop = container.scrollHeight;
   }
 
   function escapeHtml(text) {
@@ -444,7 +438,7 @@
   }
 
   function startLiveStream() {
-    let url = `/logs/stream?service=${encodeURIComponent(currentService)}`;
+    let url = `/api/logs/stream?service=${encodeURIComponent(currentService)}`;
 
     eventSource = new EventSource(url);
 
@@ -457,12 +451,12 @@
           updateServiceDisplay(currentService);
           updateLogStats({ logs: allLogs });
         } else if (data.type === 'log') {
-          // Add new log to the beginning (most recent first)
-          allLogs.unshift(data.data);
+          // Add new log to the end (append at bottom)
+          allLogs.push(data.data);
 
-          // Limit the number of logs in memory
+          // Limit the number of logs in memory (remove from beginning)
           if (allLogs.length > maxLogs) {
-            allLogs = allLogs.slice(0, maxLogs);
+            allLogs = allLogs.slice(-maxLogs);
           }
 
           // Re-render logs with search/filter applied
