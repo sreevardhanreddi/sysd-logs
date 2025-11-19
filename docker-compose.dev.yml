@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8011:8000"
+    volumes:
+      - .:/app
+      # Mount full systemd runtime directory for proper D-Bus communication
+      - /run/systemd:/run/systemd:ro
+      # Mount D-Bus system socket for systemd communication
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+      # Mount cgroup for systemd access
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    env_file:
+      - .env
+    environment:
+      # Ensure D-Bus uses the correct socket
+      - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket
+    # Required for systemd access
+    privileged: true
+    pid: "host"

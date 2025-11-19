@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs - Journal Viewer{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-4xl font-bold text-white mb-2">System Logs</h1>
+        <p class="text-gray-400">Real-time systemd journal viewer</p>
+      </div>
+      <a href="/ui"
+        class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Services</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Controls Card -->
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 mb-6 border border-slate-700">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div class="flex items-center space-x-4 flex-wrap">
+        <button onclick="refreshLogs()"
+          class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+            </path>
+          </svg>
+          <span>Refresh</span>
+        </button>
+
+        <select id="service-filter"
+          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+          onchange="updateService(this.value)">
+          <option value="">All Services</option>
+        </select>
+
+        <select id="log-limit"
+          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          onchange="updateLogLimit(this.value)">
+          <option value="50">Last 50</option>
+          <option value="100" selected>Last 100</option>
+          <option value="200">Last 200</option>
+          <option value="500">Last 500</option>
+          <option value="1000">Last 1000</option>
+        </select>
+
+        <button id="auto-refresh-btn" onclick="toggleAutoRefresh()"
+          class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+          <svg id="auto-refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+            </path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span id="auto-refresh-text">Auto-Refresh: OFF</span>
+        </button>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <input type="text" id="search-logs" placeholder="Filter logs..."
+          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          oninput="filterLogs(this.value)">
+
+        <select id="priority-filter"
+          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          onchange="filterLogs(document.getElementById('search-logs').value)">
+          <option value="all">All Priorities</option>
+          <option value="0">Emergency</option>
+          <option value="1">Alert</option>
+          <option value="2">Critical</option>
+          <option value="3">Error</option>
+          <option value="4">Warning</option>
+          <option value="5">Notice</option>
+          <option value="6">Info</option>
+          <option value="7">Debug</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="mt-4" id="log-stats">
+      <div class="flex items-center space-x-2 text-gray-300">
+        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+        <span>Loading logs...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs Container -->
+  <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden">
+    <div class="p-4 bg-slate-900 border-b border-slate-700">
+      <h2 class="text-lg font-semibold text-white">Journal Entries</h2>
+      <p id="current-service-display" class="text-sm text-gray-400 mt-1"></p>
+    </div>
+    <div id="logs-container" class="p-4 font-mono text-sm overflow-y-auto max-h-[600px] bg-slate-900">
+      <!-- Logs will be loaded here via JavaScript -->
+      <div class="flex flex-col items-center justify-center space-y-3 py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <p class="text-gray-400">Loading journal entries...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allLogs = [];
+  let allServices = [];
+  let autoRefreshInterval = null;
+  let isAutoRefreshEnabled = false;
+  let currentService = "";
+
+  // Load services and logs on page load
+  window.addEventListener('DOMContentLoaded', function () {
+    loadServices();
+    loadLogs();
+  });
+
+  async function loadServices() {
+    try {
+      const response = await fetch('/services/');
+      const data = await response.json();
+      allServices = data.services || [];
+
+      const select = document.getElementById('service-filter');
+      select.innerHTML = '<option value="">All Services</option>';
+
+      allServices.forEach(service => {
+        const option = document.createElement('option');
+        option.value = service.unit;
+        option.textContent = service.unit;
+        select.appendChild(option);
+      });
+    } catch (e) {
+      console.error('Error loading services:', e);
+    }
+  }
+
+  async function loadLogs() {
+    const limit = document.getElementById('log-limit').value;
+    const service = document.getElementById('service-filter').value;
+    currentService = service;
+
+    try {
+      let url = `/logs/?limit=${limit}`;
+      if (service) {
+        url += `&service=${encodeURIComponent(service)}`;
+      }
+
+      const response = await fetch(url);
+      const data = await response.json();
+      allLogs = data.logs || [];
+      renderLogs(allLogs);
+      updateLogStats(data);
+      updateServiceDisplay(service);
+    } catch (e) {
+      console.error('Error loading logs:', e);
+      document.getElementById('logs-container').innerHTML = `
+        <div class="text-center text-red-400 py-8">
+          <p>Error loading logs: ${e.message}</p>
+        </div>
+      `;
+    }
+  }
+
+  function updateServiceDisplay(service) {
+    const display = document.getElementById('current-service-display');
+    if (service) {
+      display.textContent = `Showing logs for: ${service}`;
+      display.classList.add('text-blue-400');
+    } else {
+      display.textContent = 'Showing logs from all services';
+      display.classList.remove('text-blue-400');
+    }
+  }
+
+  function updateLogStats(data) {
+    const statsDiv = document.getElementById('log-stats');
+    const priorities = {
+      '0': 'Emergency', '1': 'Alert', '2': 'Critical',
+      '3': 'Error', '4': 'Warning', '5': 'Notice',
+      '6': 'Info', '7': 'Debug'
+    };
+
+    const priorityCounts = {};
+    data.logs.forEach(log => {
+      const priority = log.priority.toString();
+      priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+    });
+
+    statsDiv.innerHTML = `
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+        ${Object.keys(priorities).map(p => {
+      const count = priorityCounts[p] || 0;
+      const colors = {
+        '0': 'bg-red-900/30 border-red-800 text-red-300',
+        '1': 'bg-red-900/30 border-red-800 text-red-300',
+        '2': 'bg-red-800/30 border-red-700 text-red-300',
+        '3': 'bg-orange-900/30 border-orange-800 text-orange-300',
+        '4': 'bg-yellow-900/30 border-yellow-800 text-yellow-300',
+        '5': 'bg-blue-900/30 border-blue-800 text-blue-300',
+        '6': 'bg-slate-700/30 border-slate-600 text-slate-300',
+        '7': 'bg-slate-700/30 border-slate-600 text-slate-300'
+      };
+      return `
+          <div class="rounded-lg p-2 border ${colors[p]}">
+            <p class="text-xs">${priorities[p]}</p>
+            <p class="text-xl font-bold">${count}</p>
+          </div>
+        `;
+    }).join('')}
+      </div>
+    `;
+  }
+
+  function getPriorityColor(priority) {
+    const p = parseInt(priority);
+    if (p <= 2) return 'text-red-400 bg-red-900/20';
+    if (p === 3) return 'text-orange-400 bg-orange-900/20';
+    if (p === 4) return 'text-yellow-400 bg-yellow-900/20';
+    if (p === 5) return 'text-blue-400 bg-blue-900/20';
+    return 'text-gray-400 bg-slate-700/20';
+  }
+
+  function getPriorityLabel(priority) {
+    const labels = {
+      '0': 'EMERG', '1': 'ALERT', '2': 'CRIT',
+      '3': 'ERROR', '4': 'WARN', '5': 'NOTICE',
+      '6': 'INFO', '7': 'DEBUG'
+    };
+    return labels[priority.toString()] || 'UNKNOWN';
+  }
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) return 'N/A';
+    try {
+      // If timestamp is a number (microseconds since epoch)
+      if (typeof timestamp === 'number' || !isNaN(timestamp)) {
+        const date = new Date(parseInt(timestamp) / 1000);
+        return date.toLocaleString();
+      }
+      // If timestamp is already a string
+      return new Date(timestamp).toLocaleString();
+    } catch (e) {
+      return timestamp;
+    }
+  }
+
+  function renderLogs(logs) {
+    const container = document.getElementById('logs-container');
+
+    if (!logs || logs.length === 0) {
+      container.innerHTML = `
+        <div class="text-center text-gray-400 py-8">
+          <p>No logs found</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = logs.map(log => {
+      const priorityColor = getPriorityColor(log.priority);
+      const priorityLabel = getPriorityLabel(log.priority);
+      const timestamp = formatTimestamp(log.timestamp);
+
+      return `
+        <div class="log-entry mb-2 p-3 rounded border border-slate-700 hover:border-slate-600 transition duration-150 ${priorityColor}"
+             data-priority="${log.priority}"
+             data-unit="${log.unit}"
+             data-message="${log.message}">
+          <div class="flex items-start space-x-3">
+            <span class="inline-flex items-center px-2 py-1 rounded text-xs font-bold ${priorityColor}">
+              ${priorityLabel}
+            </span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center space-x-2 text-xs text-gray-400 mb-1">
+                <span class="font-semibold text-blue-400">${log.unit}</span>
+                <span>•</span>
+                <span>${timestamp}</span>
+                ${log.pid ? `<span>•</span><span>PID: ${log.pid}</span>` : ''}
+              </div>
+              <div class="text-sm text-gray-200 break-words">
+                ${escapeHtml(log.message)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Auto-scroll to bottom
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function filterLogs(searchTerm) {
+    const priorityFilter = document.getElementById('priority-filter').value;
+
+    let filtered = allLogs.filter(log => {
+      const matchesSearch = searchTerm === '' ||
+        log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.unit.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesPriority = priorityFilter === 'all' ||
+        log.priority.toString() === priorityFilter;
+
+      return matchesSearch && matchesPriority;
+    });
+
+    renderLogs(filtered);
+  }
+
+  function updateLogLimit(limit) {
+    loadLogs();
+  }
+
+  function updateService(service) {
+    loadLogs();
+  }
+
+  function refreshLogs() {
+    loadLogs();
+  }
+
+  function toggleAutoRefresh() {
+    isAutoRefreshEnabled = !isAutoRefreshEnabled;
+    const btn = document.getElementById('auto-refresh-btn');
+    const text = document.getElementById('auto-refresh-text');
+    const icon = document.getElementById('auto-refresh-icon');
+
+    if (isAutoRefreshEnabled) {
+      btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+      btn.classList.add('bg-green-700', 'hover:bg-green-600');
+      text.textContent = 'Auto-Refresh: ON';
+      icon.classList.add('animate-spin');
+
+      // Refresh every 5 seconds
+      autoRefreshInterval = setInterval(() => {
+        loadLogs();
+      }, 5000);
+    } else {
+      btn.classList.remove('bg-green-700', 'hover:bg-green-600');
+      btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+      text.textContent = 'Auto-Refresh: OFF';
+      icon.classList.remove('animate-spin');
+
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+    }
+  }
+</script>
+{% endblock %}

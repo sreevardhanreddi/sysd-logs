@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Systemd Services Manager{% endblock %}</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {}
+      }
+    }
+  </script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+  <!-- Custom styles -->
+  <style>
+    body {
+      background-color: #1e1e1e;
+    }
+
+    .status-active {
+      @apply bg-green-900 text-green-300;
+    }
+
+    .status-inactive {
+      @apply bg-gray-700 text-gray-300;
+    }
+
+    .status-failed {
+      @apply bg-red-900 text-red-300;
+    }
+
+    /* Loading spinner */
+    .htmx-indicator {
+      display: none;
+    }
+
+    .htmx-request .htmx-indicator {
+      display: inline-block;
+    }
+
+    .htmx-request.htmx-indicator {
+      display: inline-block;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-900 text-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+
+</html>
