@@ -12,7 +12,7 @@
         <p class="text-gray-400">Real-time systemd journal viewer</p>
       </div>
       <a href="/"
-        class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+        class="bg-stone-700 hover:bg-stone-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
         </svg>
@@ -22,7 +22,7 @@
   </div>
 
   <!-- Controls Card -->
-  <div class="bg-slate-800 rounded-lg shadow-xl p-6 mb-6 border border-slate-700">
+  <div class="bg-stone-800 rounded-lg shadow-xl p-6 mb-6 border border-stone-700">
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div class="flex items-center space-x-4 flex-wrap">
         <button onclick="refreshLogs()"
@@ -35,14 +35,8 @@
           <span>Refresh</span>
         </button>
 
-        <select id="service-filter"
-          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-          onchange="updateService(this.value)">
-          <option value="">Select a service...</option>
-        </select>
-
         <select id="log-limit"
-          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="bg-stone-700 border border-stone-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           onchange="updateLogLimit(this.value)">
           <option value="50">Last 50</option>
           <option value="100" selected>Last 100</option>
@@ -52,7 +46,7 @@
         </select>
 
         <button id="live-stream-btn" onclick="toggleLiveStream()"
-          class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+          class="bg-stone-700 hover:bg-stone-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
           <svg id="live-stream-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
@@ -64,7 +58,7 @@
         </button>
 
         <button onclick="clearLogs()"
-          class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
+          class="bg-stone-700 hover:bg-stone-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
@@ -76,11 +70,11 @@
 
       <div class="flex items-center space-x-4">
         <input type="text" id="search-logs" placeholder="Filter logs..."
-          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="bg-stone-700 border border-stone-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           oninput="filterLogs(this.value)">
 
         <select id="priority-filter"
-          class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="bg-stone-700 border border-stone-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           onchange="filterLogs(document.getElementById('search-logs').value)">
           <option value="all">All Priorities</option>
           <option value="0">Emergency</option>
@@ -113,12 +107,12 @@
   </div>
 
   <!-- Logs Container -->
-  <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden">
-    <div class="p-4 bg-slate-900 border-b border-slate-700">
+  <div class="bg-stone-800 rounded-lg shadow-xl border border-stone-700 overflow-hidden">
+    <div class="p-4 bg-stone-900 border-b border-stone-700">
       <h2 class="text-lg font-semibold text-white">Journal Entries</h2>
       <p id="current-service-display" class="text-sm text-gray-400 mt-1"></p>
     </div>
-    <div id="logs-container" class="p-4 font-mono text-sm overflow-y-auto max-h-[600px] bg-slate-900">
+    <div id="logs-container" class="p-4 font-mono text-sm overflow-y-auto max-h-[600px] bg-stone-900">
       <!-- Logs will be loaded here via JavaScript -->
       <div class="flex flex-col items-center justify-center space-y-3 py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -138,63 +132,24 @@
 
   // Load services and logs on page load
   window.addEventListener('DOMContentLoaded', function () {
-    // Get service from URL parameter if present
+    // Get service from URL parameter (mandatory)
     const urlParams = new URLSearchParams(window.location.search);
     const serviceParam = urlParams.get('service');
 
-    loadServices().then(() => {
-      if (serviceParam) {
-        const serviceSelect = document.getElementById('service-filter');
-        serviceSelect.value = serviceParam;
-        currentService = serviceParam;
-      }
+    if (serviceParam) {
+      currentService = serviceParam;
       loadLogs();
-    });
-  });
-
-  async function loadServices() {
-    try {
-      const response = await fetch('/api/services/');
-      const data = await response.json();
-      allServices = data.services || [];
-
-      const select = document.getElementById('service-filter');
-      select.innerHTML = '<option value="">Select a service...</option>';
-
-      allServices.forEach(service => {
-        const option = document.createElement('option');
-        option.value = service.unit;
-        option.textContent = service.unit;
-        select.appendChild(option);
-      });
-    } catch (e) {
-      console.error('Error loading services:', e);
+    } else {
+      // Redirect to home if no service specified
+      window.location.href = '/';
     }
-  }
+  });
 
   async function loadLogs() {
     const limit = document.getElementById('log-limit').value;
-    const service = document.getElementById('service-filter').value;
-    currentService = service;
-
-    // Service is mandatory
-    if (!service) {
-      document.getElementById('logs-container').innerHTML = `
-        <div class="text-center text-yellow-400 py-8">
-          <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-            </path>
-          </svg>
-          <p class="text-lg font-medium">Please select a service to view logs</p>
-        </div>
-      `;
-      updateServiceDisplay('');
-      return;
-    }
 
     try {
-      let url = `/api/logs/?service=${encodeURIComponent(service)}&limit=${limit}`;
+      let url = `/api/logs/?service=${encodeURIComponent(currentService)}&limit=${limit}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -206,7 +161,7 @@
       allLogs = data.logs || [];
       renderLogs(allLogs);
       updateLogStats(data);
-      updateServiceDisplay(service);
+      updateServiceDisplay(currentService);
     } catch (e) {
       console.error('Error loading logs:', e);
       document.getElementById('logs-container').innerHTML = `
@@ -260,8 +215,8 @@
         '3': 'bg-orange-900/30 border-orange-800 text-orange-300',
         '4': 'bg-yellow-900/30 border-yellow-800 text-yellow-300',
         '5': 'bg-blue-900/30 border-blue-800 text-blue-300',
-        '6': 'bg-slate-700/30 border-slate-600 text-slate-300',
-        '7': 'bg-slate-700/30 border-slate-600 text-slate-300'
+        '6': 'bg-stone-700/30 border-stone-600 text-stone-300',
+        '7': 'bg-stone-700/30 border-stone-600 text-stone-300'
       };
       return `
           <div class="rounded-lg p-2 border ${colors[p]}">
@@ -280,7 +235,7 @@
     if (p === 3) return 'text-orange-400 bg-orange-900/20';
     if (p === 4) return 'text-yellow-400 bg-yellow-900/20';
     if (p === 5) return 'text-blue-400 bg-blue-900/20';
-    return 'text-gray-400 bg-slate-700/20';
+    return 'text-gray-400 bg-stone-700/20';
   }
 
   function getPriorityLabel(priority) {
@@ -326,7 +281,7 @@
       const timestamp = formatTimestamp(log.timestamp);
 
       return `
-        <div class="log-entry mb-2 p-3 rounded border border-slate-700 hover:border-slate-600 transition duration-150 ${priorityColor}"
+        <div class="log-entry mb-2 p-3 rounded border border-stone-700 hover:border-stone-600 transition duration-150 ${priorityColor}"
              data-priority="${log.priority}"
              data-unit="${log.unit}"
              data-message="${log.message}">
@@ -385,13 +340,6 @@
     loadLogs();
   }
 
-  function updateService(service) {
-    // Stop live stream when changing service
-    if (isLiveStreamEnabled) {
-      toggleLiveStream(); // Turn off live stream
-    }
-    loadLogs();
-  }
 
   function refreshLogs() {
     if (isLiveStreamEnabled) {
@@ -417,7 +365,7 @@
     const statusIndicator = document.getElementById('stream-status');
 
     if (isLiveStreamEnabled) {
-      btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+      btn.classList.remove('bg-stone-700', 'hover:bg-stone-600');
       btn.classList.add('bg-green-700', 'hover:bg-green-600');
       text.textContent = 'Live Stream: ON';
       icon.classList.add('animate-pulse');
@@ -427,7 +375,7 @@
       startLiveStream();
     } else {
       btn.classList.remove('bg-green-700', 'hover:bg-green-600');
-      btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+      btn.classList.add('bg-stone-700', 'hover:bg-stone-600');
       text.textContent = 'Live Stream: OFF';
       icon.classList.remove('animate-pulse');
       statusIndicator.classList.add('hidden');
