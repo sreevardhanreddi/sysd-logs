@@ -2,12 +2,13 @@
 Authentication middleware for HTTP Basic Auth
 """
 
+import os
+import secrets
+
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-import secrets
-import os
 from loguru import logger
-from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()

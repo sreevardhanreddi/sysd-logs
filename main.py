@@ -1,17 +1,18 @@
-import uvicorn
-from fastapi import FastAPI, Request, Depends
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, StreamingResponse
-from systemd import journal
-from pystemd.systemd1 import Manager
-from pystemd import daemon
-import subprocess
-import json
-from loguru import logger
-import sys
 import asyncio
-from datetime import datetime, timedelta
+import json
 import select
+import subprocess
+import sys
+from datetime import datetime, timedelta
+
+import uvicorn
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
+from loguru import logger
+from pystemd import daemon
+from pystemd.systemd1 import Manager
+from systemd import journal
 
 # Import authentication middleware
 from middlewares import verify_credentials
@@ -515,6 +516,50 @@ def restart_service(service_name: str, username: str = Depends(verify_credential
                 "status": "error",
                 "message": f"Failed to restart service {service_name}: {fallback_error.stderr or str(fallback_error)}",
                 "service": service_name,
+            }
+
+
+@app.post("/api/system/reboot")
+def system_reboot(username: str = Depends(verify_credentials)):
+    """
+    Trigger a full system reboot
+    """
+    logger.warning(f"System reboot requested by user: {username}")
+
+    try:
+        # Use pystemd to communicate with systemd via D-Bus
+        with Manager() as manager:
+            # Trigger reboot
+            manager.Manager.Reboot()
+            logger.success("System reboot initiated via D-Bus")
+            return {
+                "status": "success",
+                "message": "System reboot initiated. The system will restart shortly.",
+            }
+
+    except Exception as e:
+        logger.exception(f"Failed to reboot system via D-Bus: {str(e)}")
+        logger.info("Falling back to systemctl command")
+
+        # Fallback to systemctl command
+        try:
+            result = subprocess.run(
+                ["systemctl", "reboot"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.success("System reboot initiated using fallback")
+            return {
+                "status": "success",
+                "message": "System reboot initiated. The system will restart shortly.",
+            }
+
+        except subprocess.CalledProcessError as fallback_error:
+            logger.exception(f"Fallback method also failed: {str(fallback_error)}")
+            return {
+                "status": "error",
+                "message": f"Failed to reboot system: {fallback_error.stderr or str(fallback_error)}",
             }
 
 

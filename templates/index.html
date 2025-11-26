@@ -6,9 +6,21 @@
 <div class="max-w-9xl mx-auto">
   <!-- Header -->
   <div class="mb-8">
-    <div>
-      <h1 class="text-4xl font-bold text-white mb-2">Systemd Services Dashboard</h1>
-      <p class="text-gray-400">Monitor and manage your system services</p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-4xl font-bold text-white mb-2">Systemd Services Dashboard</h1>
+        <p class="text-gray-400">Monitor and manage your system services</p>
+      </div>
+      <button onclick="triggerReboot()" 
+              class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center space-x-2"
+              title="Reboot System">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+          </path>
+        </svg>
+        <span>Reboot System</span>
+      </button>
     </div>
   </div>
 
@@ -349,6 +361,39 @@
       notification.style.transition = 'opacity 0.5s ease-out';
       setTimeout(() => notification.remove(), 500);
     }, 5000);
+  }
+
+  async function triggerReboot() {
+    // Double confirmation for system reboot
+    if (!confirm('⚠️ WARNING: This will reboot the entire system!\n\nAre you sure you want to continue?')) {
+      return;
+    }
+    
+    if (!confirm('⚠️ FINAL CONFIRMATION\n\nThis action will restart the system and disconnect all users.\n\nClick OK to proceed with reboot.')) {
+      return;
+    }
+
+    try {
+      showNotification('Initiating system reboot...', 'info');
+      
+      const response = await fetch('/api/system/reboot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        showNotification('System reboot initiated! The system will restart shortly.', 'success');
+      } else {
+        showNotification(`Failed to reboot system: ${data.message}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error triggering reboot:', error);
+      showNotification(`Error triggering reboot: ${error.message}`, 'error');
+    }
   }
 </script>
 {% endblock %}
